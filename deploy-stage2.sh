@@ -17,7 +17,7 @@ trap 'cleanup $LINENO $?' ERR
 
 # Check for required files
 echo "Checking for required files..."
-for file in docker-compose.yml config/nginx.conf.template .env Dockerfile.nginx; do
+for file in docker-compose.yml config/nginx.conf.template .env; do
     if [[ ! -f "$file" ]]; then
         echo "ERROR: $file not found in current directory"
         exit 1
@@ -43,9 +43,16 @@ echo "Pulling Docker images..."
 docker pull "$BLUE_IMAGE"
 docker pull "$GREEN_IMAGE"
 
+# Use docker compose if available, otherwise fallback to docker-compose
+COMPOSE_CMD="docker-compose"
+if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+fi
+echo "Using compose command: $COMPOSE_CMD"
+
 # Run Docker Compose
 echo "Starting Docker Compose..."
-docker-compose up -d --build
+$COMPOSE_CMD up -d
 
 # Validate deployment
 echo "Validating deployment..."
@@ -53,9 +60,9 @@ sleep 5
 response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT:-8080}/version)
 if [[ "$response" != "200" ]]; then
     echo "ERROR: Failed to get 200 response from http://localhost:${PORT:-8080}/version"
-    docker-compose logs nginx
-    docker-compose logs app_blue
-    docker-compose logs app_green
+    $COMPOSE_CMD logs nginx
+    $COMPOSE_CMD logs app_blue
+    $COMPOSE_CMD logs app_green
     exit 1
 fi
 

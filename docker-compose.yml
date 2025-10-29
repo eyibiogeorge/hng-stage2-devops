@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   nginx:
-    build:
-      context: .
-      dockerfile: Dockerfile.nginx
+    image: nginx:1.25-alpine
     ports:
       - "${PORT:-8080}:80"
     volumes:
@@ -17,6 +15,7 @@ services:
       - GREEN_PORT=3000
     command: >
       /bin/sh -c "
+        apk add --no-cache gettext &&
         envsubst '$$ACTIVE_POOL $$BLUE_HOST $$BLUE_PORT $$GREEN_HOST $$GREEN_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
         nginx -g 'daemon off;'
       "
@@ -27,7 +26,7 @@ services:
       - app-network
 
   app_blue:
-    image: ${BLUE_IMAGE:-hnginternship/blue-node-app:latest}
+    image: ${BLUE_IMAGE:-yimikaade/wonderful:devops-stage-two}
     ports:
       - "${PORT_BLUE:-8081}:3000"
     environment:
@@ -37,7 +36,7 @@ services:
       - app-network
 
   app_green:
-    image: ${GREEN_IMAGE:-hnginternship/green-node-app:latest}
+    image: ${GREEN_IMAGE:-yimikaade/wonderful:devops-stage-two}
     ports:
       - "${PORT_GREEN:-8082}:3000"
     environment:
