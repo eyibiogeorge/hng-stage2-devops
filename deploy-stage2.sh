@@ -44,6 +44,7 @@ if [[ "$ACTIVE_POOL" != "blue" && "$ACTIVE_POOL" != "green" ]]; then
     echo "ERROR: ACTIVE_POOL must be 'blue' or 'green'"
     exit 1
 fi
+echo "Environment variables: ACTIVE_POOL=$ACTIVE_POOL, RELEASE_ID_BLUE=$RELEASE_ID_BLUE, RELEASE_ID_GREEN=$RELEASE_ID_GREEN"
 
 # Check port availability
 echo "Checking port availability..."
@@ -117,8 +118,14 @@ if ! echo "$headers" | grep -q "X-App-Pool: ${ACTIVE_POOL}"; then
     echo "$headers"
     exit 1
 fi
-if ! echo "$headers" | grep -q "X-Release-Id: ${RELEASE_ID_${ACTIVE_POOL^^}}"; then
-    echo "ERROR: X-Release-Id header does not match expected value (${RELEASE_ID_${ACTIVE_POOL^^}})"
+# Determine the expected release ID based on ACTIVE_POOL
+if [[ "$ACTIVE_POOL" == "blue" ]]; then
+    EXPECTED_RELEASE_ID="$RELEASE_ID_BLUE"
+else
+    EXPECTED_RELEASE_ID="$RELEASE_ID_GREEN"
+fi
+if ! echo "$headers" | grep -q "X-Release-Id: ${EXPECTED_RELEASE_ID}"; then
+    echo "ERROR: X-Release-Id header does not match expected value (${EXPECTED_RELEASE_ID})"
     echo "Headers received:"
     echo "$headers"
     exit 1
