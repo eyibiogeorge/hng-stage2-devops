@@ -51,12 +51,28 @@ PORT=${PORT:-8080}
 if command -v ss >/dev/null; then
     if ss -tuln | grep -q ":$PORT "; then
         echo "ERROR: Port $PORT is in use"
-        exit 1
+        echo "Processes using port $PORT:"
+        ss -tulnp | grep ":$PORT" || echo "No process details available"
+        echo "Attempting to stop existing Docker Compose services..."
+        docker compose down || echo "Failed to stop Docker Compose services"
+        if ss -tuln | grep -q ":$PORT "; then
+            echo "ERROR: Port $PORT is still in use after attempting to stop services"
+            echo "Try stopping the process manually with 'sudo fuser -k $PORT/tcp' or use a different port"
+            exit 1
+        fi
     fi
 elif command -v netstat >/dev/null; then
     if netstat -tuln | grep -q ":$PORT "; then
         echo "ERROR: Port $PORT is in use"
-        exit 1
+        echo "Processes using port $PORT:"
+        netstat -tulnp | grep ":$PORT" || echo "No process details available"
+        echo "Attempting to stop existing Docker Compose services..."
+        docker compose down || echo "Failed to stop Docker Compose services"
+        if netstat -tuln | grep -q ":$PORT "; then
+            echo "ERROR: Port $PORT is still in use after attempting to stop services"
+            echo "Try stopping the process manually with 'sudo fuser -k $PORT/tcp' or use a different port"
+            exit 1
+        fi
     fi
 else
     echo "WARNING: Neither ss nor netstat found, skipping port check"
