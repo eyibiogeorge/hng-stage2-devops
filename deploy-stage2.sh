@@ -95,12 +95,19 @@ echo "Using compose command: $COMPOSE_CMD"
 echo "Starting Docker Compose..."
 $COMPOSE_CMD up -d
 
+# Reset chaos state to ensure clean deployment
+echo "Resetting chaos state for app_blue and app_green..."
+curl -s -X POST http://localhost:8081/chaos/stop || echo "Failed to reset chaos for app_blue"
+curl -s -X POST http://localhost:8082/chaos/stop || echo "Failed to reset chaos for app_green"
+
 # Validate deployment
 echo "Validating deployment..."
 sleep 15
-response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT:-8080}/version || echo "failed")
+response=$(curl -s -o /tmp/response_body.txt -w "%{http_code}" http://localhost:${PORT:-8080}/version || echo "failed")
 if [[ "$response" != "200" ]]; then
     echo "ERROR: Failed to get 200 response from http://localhost:${PORT:-8080}/version (got $response)"
+    echo "Response body:"
+    cat /tmp/response_body.txt
     $COMPOSE_CMD logs nginx
     $COMPOSE_CMD logs app_blue
     $COMPOSE_CMD logs app_green
@@ -118,7 +125,6 @@ if ! echo "$headers" | grep -q "X-App-Pool: ${ACTIVE_POOL}"; then
     echo "$headers"
     exit 1
 fi
-# Determine the expected release ID based on ACTIVE_POOL
 if [[ "$ACTIVE_POOL" == "blue" ]]; then
     EXPECTED_RELEASE_ID="$RELEASE_ID_BLUE"
 else
@@ -136,9 +142,11 @@ echo "Testing direct access to app_blue and app_green..."
 for service in blue green; do
     port_var="PORT_${service^^}"
     port=${!port_var:-${service == "blue" && echo 8081 || echo 8082}}
-    response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$port/version || echo "failed")
+    response=$(curl -s -o /tmp/response_body_${service}.txt -w "%{http_code}" http://localhost:$port/version || echo "failed")
     if [[ "$response" != "200" ]]; then
         echo "WARNING: Failed to get 200 response from http://localhost:$port/version for app_$service (got $response)"
+        echo "Response body for app_$service:"
+        cat /tmp/response_body_${service}.txt
     else
         echo "Successfully accessed http://localhost:$port/version for app_$service"
     fi
