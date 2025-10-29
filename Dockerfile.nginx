@@ -3,7 +3,5 @@ FROM nginx:1.25-alpine
 # Install envsubst (part of gettext for variable substitution)
 RUN apk add --no-cache gettext
 
-# Copy the nginx config template (but in compose we mount it)
-COPY nginx.conf.template /etc/nginx/nginx.conf.template
-
-# The command is overridden in docker-compose.yml
+# Copy the nginx config template from the config directory
+COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
