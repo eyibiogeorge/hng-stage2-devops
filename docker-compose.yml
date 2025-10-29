@@ -2,11 +2,13 @@ version: '3.8'
 
 services:
   nginx:
-    image: nginx:1.25-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
     ports:
       - "${PORT:-8080}:80"
     volumes:
-      - ./nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+      - ./config/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL:-blue}
       - BLUE_HOST=app_blue
