@@ -18,6 +18,8 @@ cleanup() {
     echo "Checking Nginx configuration..."
     $COMPOSE_CMD exec -T nginx cat /tmp/nginx_config.log || echo "No Nginx config log available"
     $COMPOSE_CMD exec -T nginx cat /tmp/nginx_config_error.log || echo "No Nginx config error log available"
+    echo "Validation response body:"
+    cat /tmp/response_body.txt || echo "No response body available"
     exit "$2"
 }
 trap 'cleanup $LINENO $?' ERR
@@ -103,11 +105,12 @@ curl -s -X POST http://localhost:8082/chaos/stop || echo "Failed to reset chaos 
 # Validate deployment
 echo "Validating deployment..."
 sleep 15
-response=$(curl -s -o /tmp/response_body.txt -w "%{http_code}" http://localhost:${PORT:-8080}/version || echo "failed")
+curl -s -v http://localhost:${PORT:-8080}/version > /tmp/validation_output.txt 2>&1
+response=$(grep "< HTTP/1.1" /tmp/validation_output.txt | awk '{print $3}' || echo "failed")
 if [[ "$response" != "200" ]]; then
     echo "ERROR: Failed to get 200 response from http://localhost:${PORT:-8080}/version (got $response)"
-    echo "Response body:"
-    cat /tmp/response_body.txt
+    echo "Full curl output:"
+    cat /tmp/validation_output.txt
     $COMPOSE_CMD logs nginx
     $COMPOSE_CMD logs app_blue
     $COMPOSE_CMD logs app_green
@@ -118,7 +121,7 @@ fi
 
 # Verify headers
 echo "Verifying response headers..."
-headers=$(curl -s -I http://localhost:${PORT:-8080}/version)
+headers=$(grep "^<" /tmp/validation_output.txt)
 if ! echo "$headers" | grep -q "X-App-Pool: ${ACTIVE_POOL}"; then
     echo "ERROR: X-App-Pool header does not match ACTIVE_POOL (${ACTIVE_POOL})"
     echo "Headers received:"
@@ -142,11 +145,12 @@ echo "Testing direct access to app_blue and app_green..."
 for service in blue green; do
     port_var="PORT_${service^^}"
     port=${!port_var:-${service == "blue" && echo 8081 || echo 8082}}
-    response=$(curl -s -o /tmp/response_body_${service}.txt -w "%{http_code}" http://localhost:$port/version || echo "failed")
+    curl -s -v http://localhost:$port/version > /tmp/response_output_${service}.txt 2>&1
+    response=$(grep "< HTTP/1.1" /tmp/response_output_${service}.txt | awk '{print $3}' || echo "failed")
     if [[ "$response" != "200" ]]; then
         echo "WARNING: Failed to get 200 response from http://localhost:$port/version for app_$service (got $response)"
-        echo "Response body for app_$service:"
-        cat /tmp/response_body_${service}.txt
+        echo "Full curl output for app_$service:"
+        cat /tmp/response_output_${service}.txt
     else
         echo "Successfully accessed http://localhost:$port/version for app_$service"
     fi
