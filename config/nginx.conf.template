@@ -4,65 +4,28 @@ events {
 
 http {
     upstream blue_pool {
-        server ${BLUE_HOST}:${BLUE_PORT};
-        keepalive 32;
+        server ${BLUE_HOST}:${BLUE_PORT} max_fails=1 fail_timeout=10s;
     }
 
     upstream green_pool {
-        server ${GREEN_HOST}:${GREEN_PORT} backup;
-        keepalive 32;
-    }
-
-    upstream active_pool {
-        ${ACTIVE_POOL}_pool;
+        server ${GREEN_HOST}:${GREEN_PORT} max_fails=1 fail_timeout=10s;
     }
 
     server {
         listen 80;
 
         location / {
-            proxy_pass http://active_pool;
+            proxy_pass http://${ACTIVE_POOL}_pool;
             proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection 'upgrade';
             proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Host $server_name;
-            proxy_set_header X-Forwarded-Port $server_port;
-
-            # Forward app-specific headers
-            proxy_set_header X-App-Pool $http_x_app_pool;
-            proxy_set_header X-Release-Id $http_x_release_id;
-
-            # Pass through all response headers from upstream
             proxy_pass_header X-App-Pool;
             proxy_pass_header X-Release-Id;
-
-            # Tight timeouts for fast failover
             proxy_connect_timeout 2s;
             proxy_send_timeout 5s;
             proxy_read_timeout 5s;
-
-            # Retry policy: retry on 5xx, timeouts, and connection errors
-            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
             proxy_next_upstream_timeout 1s;
             proxy_next_upstream_tries 1;
-
-            # Health check-like behavior via passive monitoring
-            # Low max_fails and short fail_timeout for primary (blue)
-            health_check interval=10 fails=1 passes=1 uri=/healthz match=hlth_blue;
-        }
-
-        # Match for blue health
-        match hlth_blue {
-            status 200;
-        }
-
-        # Match for green health
-        match hlth_green {
-            status 200;
         }
     }
 }
