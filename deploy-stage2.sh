@@ -38,15 +38,10 @@ deploy_green() {
   export ACTIVE_POOL="green"
   export RELEASE_ID="$RELEASE_ID_GREEN"
 
+  echo "🔁 Restarting Nginx with updated environment..."
   $COMPOSE_CMD stop nginx
   $COMPOSE_CMD up -d nginx
   wait_for_container nginx
-
-  echo "🔁 Regenerating Nginx config..."
-  $COMPOSE_CMD exec -T nginx /bin/sh -c "
-    envsubst '\$ACTIVE_POOL \$BLUE_HOST \$BLUE_PORT \$GREEN_HOST \$GREEN_PORT \$RELEASE_ID' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
-    nginx -s reload || nginx
-  "
 
   echo "✅ Failover to green complete."
 }
