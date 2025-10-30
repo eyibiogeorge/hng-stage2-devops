@@ -68,6 +68,7 @@ docker pull "$BLUE_IMAGE"
 docker pull "$GREEN_IMAGE"
 
 echo "🚀 Starting services..."
+$COMPOSE_CMD down -v
 $COMPOSE_CMD up -d
 wait_for_container nginx
 
