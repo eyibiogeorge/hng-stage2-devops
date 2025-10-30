@@ -31,6 +31,7 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-App-Pool ${ACTIVE_POOL};
             proxy_set_header X-Release-Id ${RELEASE_ID};
+            proxy_set_header X-Release-Id "${RELEASE_ID:-unknown}";
         }
     }
 }
