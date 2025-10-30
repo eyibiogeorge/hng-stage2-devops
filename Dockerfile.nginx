@@ -1,21 +1,7 @@
 FROM nginx:1.25-alpine
 
-# Install envsubst for variable substitution
 RUN apk add --no-cache gettext
 
-# Set default environment variables (can be overridden at runtime)
-ENV ACTIVE_POOL=blue \
-    BLUE_HOST=app_blue \
-    BLUE_PORT=3000 \
-    GREEN_HOST=app_green \
-    GREEN_PORT=3000 \
-    RELEASE_ID=blue-v1
-
-# Copy the config template
 COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
 
-# Generate final config
-RUN envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
-
-# Start Nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/bin/sh", "-c", "envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
