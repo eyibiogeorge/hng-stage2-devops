@@ -4,39 +4,45 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     ports:
-      - "${PORT}:80"
+      - "${PORT}:80" # Maps Host:8080 to Nginx:80
     environment:
-      - ACTIVE_POOL=${ACTIVE_POOL}
-      - BLUE_HOST=${BLUE_HOST}
-      - BLUE_PORT=${BLUE_PORT}
-      - GREEN_HOST=${GREEN_HOST}
-      - GREEN_PORT=${GREEN_PORT}
-      - RELEASE_ID=${RELEASE_ID}
+      # Pass only the variables Nginx needs for template substitution
+      - ACTIVE_POOL
+      - BLUE_HOST
+      - BLUE_PORT
+      - GREEN_HOST
+      - GREEN_PORT
+      - RELEASE_ID
     depends_on:
       - app_blue
       - app_green
     networks:
       - app-network
+    restart: unless-stopped # Added for resilience
 
   app_blue:
     image: ${BLUE_IMAGE}
+    # Expose app port on host for optional debugging (e.g., curl :8081)
     ports:
-      - "${PORT_BLUE}:${BLUE_PORT}"
+      - "8081:${APP_INTERNAL_PORT}" 
     environment:
       - RELEASE_ID=${RELEASE_ID_BLUE}
       - APP_POOL=blue
     networks:
       - app-network
+    restart: unless-stopped # Added for resilience
 
   app_green:
     image: ${GREEN_IMAGE}
+    # Expose app port on host for optional debugging (e.g., curl :8082)
     ports:
-      - "${PORT_GREEN}:${GREEN_PORT}"
+      - "8082:${APP_INTERNAL_PORT}" 
     environment:
       - RELEASE_ID=${RELEASE_ID_GREEN}
       - APP_POOL=green
     networks:
       - app-network
+    restart: unless-stopped # Added for resilience
 
 networks:
   app-network:
