@@ -20,6 +20,12 @@ deploy_green() {
   echo "Failover to green complete."
 }
 
+if [[ "$ACTIVE_POOL" == "blue" ]]; then
+  export RELEASE_ID="$RELEASE_ID_BLUE"
+else
+  export RELEASE_ID="$RELEASE_ID_GREEN"
+fi
+
 cleanup() {
   echo "ERROR: Script failed at line $1 with status $2"
   deploy_green
