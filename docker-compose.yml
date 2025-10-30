@@ -30,7 +30,7 @@ services:
   app_blue:
     image: ${BLUE_IMAGE}
     ports:
-      - "${PORT_BLUE}:3000"
+      - "${PORT_BLUE}8081:3000"
     environment:
       - RELEASE_ID=${RELEASE_ID_BLUE}
       - APP_POOL=blue
@@ -40,7 +40,7 @@ services:
   app_green:
     image: ${GREEN_IMAGE}
     ports:
-      - "${PORT_GREEN}:3000"
+      - "${PORT_GREEN}8083:3000"
     environment:
       - RELEASE_ID=${RELEASE_ID_GREEN}
       - APP_POOL=green
