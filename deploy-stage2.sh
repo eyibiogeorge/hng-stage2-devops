@@ -17,12 +17,20 @@ if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
     COMPOSE_CMD="docker compose"
 fi
 
+# Set the initial RELEASE_ID based on ACTIVE_POOL for image pulling (no change needed here)
+if [[ "$ACTIVE_POOL" == "blue" ]]; then
+    export RELEASE_ID="$RELEASE_ID_BLUE"
+else
+    export RELEASE_ID="$RELEASE_ID_GREEN"
+fi
+
 # --- Helper Functions ---
 
 wait_for_container() {
     local service=$1
     echo "⏳ Waiting for $service to be running..."
-    for i in {1..15}; do # Increased attempts for robustness
+    # Increase checks from 10 to 15
+    for i in {1..15}; do
         # Check for service in 'running' state and not 'exited'
         status=$($COMPOSE_CMD ps --status=running --services | grep -w "$service" || true)
         if [[ "$status" == "$service" ]]; then
@@ -39,22 +47,27 @@ wait_for_container() {
 deploy_green() {
     echo "⚠️ ERROR: Attempting failover to GREEN deployment..."
 
-    # Use a temporary .env to set the failover pool
+    # Create a temporary .env file for Docker Compose to use 'green'
     cat .env | sed 's/^ACTIVE_POOL=.*/ACTIVE_POOL=green/' > .env.failover
+    # Temporarily rename the active .env to allow Docker Compose to use the failover file
+    mv .env .env.temp
+    mv .env.failover .env
 
-    # We must explicitly set RELEASE_ID to match the new pool for immediate Nginx restart
+    # We must explicitly set variables for the script's reporting and logic
     ACTIVE_POOL="green"
     RELEASE_ID="$RELEASE_ID_GREEN"
 
     echo "🔁 Restarting Nginx with updated environment..."
-    # Down/Up to ensure Nginx picks up the environment changes
+    # Stop and start Nginx to pick up the new ACTIVE_POOL from the updated .env
     $COMPOSE_CMD stop nginx
     $COMPOSE_CMD up -d nginx
 
     wait_for_container nginx || { echo "❌ Failed to bring up Nginx on green pool."; exit 1; }
     
     # Restore original .env file (optional, but clean)
-    mv .env.failover .env || true
+    mv .env .env.failover # Rename the current .env (which is green) to failover
+    mv .env.temp .env # Restore the temp (which is the original, blue)
+
     echo "✅ Failover to green complete. New ACTIVE_POOL is $ACTIVE_POOL."
 }
 
@@ -76,38 +89,43 @@ for f in docker-compose.yml config/nginx.conf.template .env; do
     [[ -f "$f" ]] || { echo "Missing $f"; exit 1; }
 done
 
-# Ensure environment is set for the initial pull and start
-if [[ "$ACTIVE_POOL" == "blue" ]]; then
-    export RELEASE_ID="$RELEASE_ID_BLUE"
-else
-    export RELEASE_ID="$RELEASE_ID_GREEN"
-fi
-
 echo "📦 Pulling Docker images..."
 docker pull "$BLUE_IMAGE"
 docker pull "$GREEN_IMAGE"
 
 echo "🚀 Starting services (Active Pool: $ACTIVE_POOL)..."
-$COMPOSE_CMD down -v --remove-orphans # Added --remove-orphans
+$COMPOSE_CMD down -v --remove-orphans
 $COMPOSE_CMD up -d
 
 # Wait for application containers to be available before Nginx
 wait_for_container app_blue
 wait_for_container app_green
-
-# Nginx should now be able to start and proxy
 wait_for_container nginx
 
-echo "🔎 Validating deployment..."
-sleep 10 # Increased sleep for more reliable application startup
-response=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PORT}/version")
+echo "🚀 Waiting for all services to be stable (20s initial delay)..."
+sleep 20 # Increased sleep to ensure application is ready to serve traffic
 
-if [[ "$response" != "200" ]]; then
-    echo "❌ Validation failed with status $response"
-    echo "Nginx/Application logs:"
-    $COMPOSE_CMD logs nginx app_blue || true
-    # This will trigger the ERR trap and call cleanup/deploy_green
-    false
+echo "🔎 Validating deployment..."
+# Use curl flags for retries and timeouts for robust validation
+response=$(curl -s --connect-timeout 5 --retry 15 --retry-delay 2 -o /dev/null -w "%{http_code}" "http://localhost:${PORT}/version")
+curl_exit_code=$?
+
+if [[ "$curl_exit_code" -ne 0 ]]; then
+    # Curl failed with a non-HTTP error (like status 7 for connection refused)
+    echo "❌ Validation failed: Curl exit code $curl_exit_code (Connection Error)"
+    echo "--- Nginx Logs ---"
+    $COMPOSE_CMD logs nginx || true 
+    echo "--- Application Logs (Active: $ACTIVE_POOL) ---"
+    $COMPOSE_CMD logs app_"$ACTIVE_POOL" || true
+    false # Trigger the ERR trap
+elif [[ "$response" != "200" ]]; then
+    # Curl succeeded but received a non-200 HTTP code (e.g., 502 or 404)
+    echo "❌ Validation failed with HTTP status $response"
+    echo "--- Nginx Logs ---"
+    $COMPOSE_CMD logs nginx || true
+    echo "--- Application Logs (Active: $ACTIVE_POOL) ---"
+    $COMPOSE_CMD logs app_"$ACTIVE_POOL" || true
+    false # Trigger the ERR trap
 fi
 
 echo "✅ Deployment successful. ACTIVE_POOL=$ACTIVE_POOL"
