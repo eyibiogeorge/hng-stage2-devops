@@ -1,23 +1,24 @@
+version: '3.8'
+
 services:
   nginx:
     image: nginx:1.25-alpine
     ports:
-      - "${PORT:-8080}:80"
+      - "${PORT}:80"
     volumes:
       - ./config/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
     environment:
-      - ACTIVE_POOL=${ACTIVE_POOL:-blue}
-      - BLUE_HOST=app_blue
-      - BLUE_PORT=3000
-      - GREEN_HOST=app_green
-      - GREEN_PORT=3000
+      - ACTIVE_POOL=${ACTIVE_POOL}
+      - BLUE_HOST=${BLUE_HOST}
+      - BLUE_PORT=${BLUE_PORT}
+      - GREEN_HOST=${GREEN_HOST}
+      - GREEN_PORT=${GREEN_PORT}
+      - RELEASE_ID_BLUE=${RELEASE_ID_BLUE}
+      - RELEASE_ID_GREEN=${RELEASE_ID_GREEN}
     command: >
       /bin/sh -c "
         apk add --no-cache gettext &&
-        envsubst '$$ACTIVE_POOL $$BLUE_HOST $$BLUE_PORT $$GREEN_HOST $$GREEN_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
-        cat /etc/nginx/nginx.conf > /tmp/nginx_config.log &&
-        nginx -t 2> /tmp/nginx_config_error.log &&
-        if [ $? -ne 0 ]; then cat /tmp/nginx_config_error.log; exit 1; fi &&
+        envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
         nginx -g 'daemon off;'
       "
     depends_on:
@@ -27,21 +28,21 @@ services:
       - app-network
 
   app_blue:
-    image: ${BLUE_IMAGE:-yimikaade/wonderful:devops-stage-two}
+    image: ${BLUE_IMAGE}
     ports:
-      - "${PORT_BLUE:-8081}:3000"
+      - "${PORT_BLUE}:3000"
     environment:
-      - RELEASE_ID=${RELEASE_ID_BLUE:-blue-release-1.0.0}
+      - RELEASE_ID=${RELEASE_ID_BLUE}
       - APP_POOL=blue
     networks:
       - app-network
 
   app_green:
-    image: ${GREEN_IMAGE:-yimikaade/wonderful:devops-stage-two}
+    image: ${GREEN_IMAGE}
     ports:
-      - "${PORT_GREEN:-8082}:3000"
+      - "${PORT_GREEN}:3000"
     environment:
-      - RELEASE_ID=${RELEASE_ID_GREEN:-green-release-1.0.0}
+      - RELEASE_ID=${RELEASE_ID_GREEN}
       - APP_POOL=green
     networks:
       - app-network
