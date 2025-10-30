@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     ports:
-      - "8080:80"
+      - "${PORT}:80" 
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL}
       - BLUE_HOST=${BLUE_HOST}
