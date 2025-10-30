@@ -1,0 +1,7 @@
+FROM nginx:1.25-alpine
+
+RUN apk add --no-cache gettext
+
+COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
+
+CMD ["/bin/sh", "-c", "envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]

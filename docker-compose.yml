@@ -1,49 +1,64 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  app_blue:
-    image: ${BLUE_IMAGE}
-    container_name: app_blue
-    environment:
-      - RELEASE_ID=${RELEASE_ID_BLUE}
-      - APP_POOL=blue
-      - PORT=${PORT:-3000}
-    ports:
-      - "8081:${PORT:-3000}"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3000}/healthz"]
-      interval: 5s
-      timeout: 2s
-      retries: 3
-
-  app_green:
-    image: ${GREEN_IMAGE}
-    container_name: app_green
-    environment:
-      - RELEASE_ID=${RELEASE_ID_GREEN}
-      - APP_POOL=green
-      - PORT=${PORT:-3000}
-    ports:
-      - "8082:${PORT:-3000}"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3000}/healthz"]
-      interval: 5s
-      timeout: 2s
-      retries: 3
-
   nginx:
-    image: nginx:stable
-    container_name: bg_nginx
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "${PORT}:80"
+    environment:
+      - ACTIVE_POOL=${ACTIVE_POOL}
+      - BLUE_HOST=${BLUE_HOST}
+      - BLUE_PORT=${BLUE_PORT}
+      - GREEN_HOST=${GREEN_HOST}
+      - GREEN_PORT=${GREEN_PORT}
+      - RELEASE_ID=${RELEASE_ID}
+    volumes:
+      - nginx-logs:/var/log/nginx
     depends_on:
       - app_blue
       - app_green
+    networks:
+      - app-network
+
+  app_blue:
+    image: ${BLUE_IMAGE}
     ports:
-      - "${NGINX_PUBLIC_PORT:-8080}:80"
-    volumes:
-      - ./nginx/default.conf.tmpl:/etc/nginx/templates/default.conf.tmpl:ro
-      - ./nginx/start.sh:/etc/nginx/start.sh:ro
-      - ./nginx/reload.sh:/etc/nginx/reload.sh:ro
+      - "${PORT_BLUE}:${BLUE_PORT}"
     environment:
-      - ACTIVE_POOL=${ACTIVE_POOL}
-      - APP_PORT=${PORT:-3000}
-    command: ["/bin/sh", "-c", "/etc/nginx/start.sh"]
+      - RELEASE_ID=${RELEASE_ID_BLUE}
+      - APP_POOL=blue
+    networks:
+      - app-network
+
+  app_green:
+    image: ${GREEN_IMAGE}
+    ports:
+      - "${PORT_GREEN}:${GREEN_PORT}"
+    environment:
+      - RELEASE_ID=${RELEASE_ID_GREEN}
+      - APP_POOL=green
+    networks:
+      - app-network
+
+  alert_watcher:
+    build:
+      context: ./watcher
+    volumes:
+      - nginx-logs:/var/log/nginx
+    environment:
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - ERROR_RATE_THRESHOLD=${ERROR_RATE_THRESHOLD}
+      - WINDOW_SIZE=${WINDOW_SIZE}
+      - ALERT_COOLDOWN_SEC=${ALERT_COOLDOWN_SEC}
+      - MAINTENANCE_MODE=${MAINTENANCE_MODE}
+    networks:
+      - app-network
+
+volumes:
+  nginx-logs:
+
+networks:
+  app-network:
+    driver: bridge
