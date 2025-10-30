@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     ports:
-      - "${PORT}:80"
+      - 8080:80"
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL}
       - BLUE_HOST=${BLUE_HOST}
@@ -12,6 +12,7 @@ services:
       - GREEN_HOST=${GREEN_HOST}
       - GREEN_PORT=${GREEN_PORT}
       - RELEASE_ID=${RELEASE_ID}
+      
     volumes:
       - nginx-logs:/var/log/nginx
     depends_on:
