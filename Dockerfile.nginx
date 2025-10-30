@@ -1,7 +1,10 @@
 FROM nginx:1.25-alpine
 
+# Install envsubst for runtime config substitution
 RUN apk add --no-cache gettext
 
+# Copy the config template
 COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
 
+# Generate config at container startup using runtime env vars
 CMD ["/bin/sh", "-c", "envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
