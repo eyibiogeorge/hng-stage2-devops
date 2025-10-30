@@ -1,10 +1,10 @@
+pid /var/run/nginx.pid;
+
 events {
     worker_connections 1024;
 }
 
 http {
-    pid /var/run/nginx.pid;
-
     upstream blue_pool {
         server ${BLUE_HOST}:${BLUE_PORT} max_fails=1 fail_timeout=10s;
     }
