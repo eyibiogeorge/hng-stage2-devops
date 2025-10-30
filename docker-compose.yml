@@ -11,12 +11,11 @@ services:
       - BLUE_PORT=${BLUE_PORT}
       - GREEN_HOST=${GREEN_HOST}
       - GREEN_PORT=${GREEN_PORT}
-      - RELEASE_ID_BLUE=${RELEASE_ID_BLUE}
-      - RELEASE_ID_GREEN=${RELEASE_ID_GREEN}
+      - RELEASE_ID=${RELEASE_ID_BLUE}
     command: >
       /bin/sh -c "
         apk add --no-cache gettext &&
-        envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
+        envsubst '\$ACTIVE_POOL \$BLUE_HOST \$BLUE_PORT \$GREEN_HOST \$GREEN_PORT \$RELEASE_ID' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
         nginx -g 'daemon off;'
       "
     depends_on:
