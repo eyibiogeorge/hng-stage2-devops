@@ -40,7 +40,7 @@ services:
   app_green:
     image: ${GREEN_IMAGE}
     ports:
-      - "${PORT_GREEN}8083:3000"
+      - "${PORT_GREEN}8082:3000"
     environment:
       - RELEASE_ID=${RELEASE_ID_GREEN}
       - APP_POOL=green
