@@ -1,7 +1,10 @@
 FROM nginx:1.25-alpine
 
-# Install envsubst (part of gettext for variable substitution)
+# Install envsubst (for variable substitution)
 RUN apk add --no-cache gettext
 
-# Copy the nginx config template from the config directory
+# Copy the nginx config template
 COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
+
+# Optional: Set working directory for clarity
+WORKDIR /etc/nginx
