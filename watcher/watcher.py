@@ -1,4 +1,5 @@
-import os, time, requests
+import os
+import time, requests
 from collections import deque
 
 LOG_PATH = "/var/log/nginx/access.log"
@@ -24,8 +25,12 @@ def parse_line(line):
     parts = dict(item.split("=") for item in line.split() if "=" in item)
     return parts.get("pool"), parts.get("upstream_status")
 
-with open(LOG_PATH, "r") as f:
-    f.seek(0, 2)
+while not os.path.exists(LOG_PATH):
+    print(f"Waiting for log file: {LOG_PATH}")
+    time.sleep(1)
+
+with open(LOG_PATH, "r", encoding="utf-8") as f:
+    f.seek(0, os.SEEK_END)
     while True:
         line = f.readline()
         if not line:
