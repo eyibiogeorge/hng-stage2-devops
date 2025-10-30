@@ -8,6 +8,17 @@ LOG_FILE="deploy_stage2_$(date +%Y%m%d_%H%M%S).log"
 exec 1> >(tee -a "$LOG_FILE")
 exec 2>&1
 
+deploy_green() {
+    echo "Attempting failover to green deployment..."
+    export ACTIVE_POOL="green"
+    export EXPECTED_RELEASE_ID="$RELEASE_ID_GREEN"
+    $COMPOSE_CMD up -d app_green
+    echo "Green deployment triggered."
+    echo "Updating Nginx config for green pool..."
+$COMPOSE_CMD exec -T nginx /bin/sh -c \
+  "envsubst '\$ACTIVE_POOL \$BLUE_HOST \$BLUE_PORT \$GREEN_HOST \$GREEN_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -s reload"
+}
+
 # Trap errors
 cleanup() {
     echo "ERROR: Script failed at line $1 with status $2" >&2
@@ -18,8 +29,13 @@ cleanup() {
     echo "Checking Nginx configuration..."
     $COMPOSE_CMD exec -T nginx cat /tmp/nginx_config.log || echo "No Nginx config log available"
     $COMPOSE_CMD exec -T nginx cat /tmp/nginx_config_error.log || echo "No Nginx config error log available"
+    $COMPOSE_CMD exec -T nginx /bin/sh -c "envsubst < /etc/nginx/conf.d/nginx.conf.template > /etc/nginx/conf.d/default.conf && nginx -s reload"
     echo "Validation response body:"
     cat /tmp/response_body.txt || echo "No response body available"
+
+    echo "Initiating failover to green deployment..."
+    deploy_green
+
     exit "$2"
 }
 trap 'cleanup $LINENO $?' ERR
