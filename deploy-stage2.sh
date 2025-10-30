@@ -1,57 +1,75 @@
 #!/bin/bash
 set -euo pipefail
 
+# Logging setup
 LOG_FILE="deploy_stage2_$(date +%Y%m%d_%H%M%S).log"
 exec 1> >(tee -a "$LOG_FILE")
 exec 2>&1
 
+# Load environment variables
 source .env
 
+# Compose command detection
 COMPOSE_CMD="docker-compose"
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
   COMPOSE_CMD="docker compose"
 fi
 
-deploy_green() {
-  echo "Switching to green deployment..."
-  export ACTIVE_POOL="green"
-  envsubst < config/nginx.conf.template > config/nginx.conf
-  $COMPOSE_CMD up -d app_green nginx
-  echo "Failover to green complete."
-}
-
+# Determine release ID based on active pool
 if [[ "$ACTIVE_POOL" == "blue" ]]; then
   export RELEASE_ID="$RELEASE_ID_BLUE"
 else
   export RELEASE_ID="$RELEASE_ID_GREEN"
 fi
 
+# Failover function
+deploy_green() {
+  echo "⚠️ Switching to green deployment..."
+  export ACTIVE_POOL="green"
+  export RELEASE_ID="$RELEASE_ID_GREEN"
+
+  # Regenerate Nginx config
+  $COMPOSE_CMD exec -T nginx /bin/sh -c "
+    envsubst '\$ACTIVE_POOL \$BLUE_HOST \$BLUE_PORT \$GREEN_HOST \$GREEN_PORT \$RELEASE_ID' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
+    nginx -s reload
+  "
+
+  echo "✅ Failover to green complete."
+}
+
+# Error trap
 cleanup() {
-  echo "ERROR: Script failed at line $1 with status $2"
+  echo "❌ ERROR: Script failed at line $1 with status $2"
   deploy_green
   exit "$2"
 }
 trap 'cleanup $LINENO $?' ERR
 
-echo "Checking required files..."
+# Check required files
+echo "🔍 Checking required files..."
 for f in docker-compose.yml config/nginx.conf.template .env; do
   [[ -f "$f" ]] || { echo "Missing $f"; exit 1; }
 done
 
-echo "Pulling images..."
+# Pull images
+echo "📦 Pulling Docker images..."
 docker pull "$BLUE_IMAGE"
 docker pull "$GREEN_IMAGE"
 
-echo "Starting services..."
+# Start services
+echo "🚀 Starting services..."
 $COMPOSE_CMD up -d
 
-echo "Validating deployment..."
+# Wait for containers to settle
 sleep 10
+
+# Validate deployment
+echo "🔎 Validating deployment..."
 response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/version)
 
 if [[ "$response" != "200" ]]; then
-  echo "Validation failed with status $response"
-  false  # triggers ERR trap
+  echo "❌ Validation failed with status $response"
+  false  # triggers cleanup
 fi
 
-echo "Deployment successful. ACTIVE_POOL=$ACTIVE_POOL"
+echo "✅ Deployment successful. ACTIVE_POOL=$ACTIVE_POOL"
