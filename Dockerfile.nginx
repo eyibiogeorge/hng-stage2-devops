@@ -6,7 +6,7 @@ RUN apk add --no-cache gettext
 # Copy the config template
 COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
 
-# Generate config at container startup using runtime env vars
-# FIX: Explicitly list the custom variables. This prevents envsubst from wiping out
-# Nginx's built-in variables like $host and $remote_addr, which causes a config error.
-CMD ["/bin/sh", "-c", "envsubst '$BLUE_HOST $BLUE_PORT $GREEN_HOST $GREEN_PORT $ACTIVE_POOL $RELEASE_ID' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'"]
+# FIX: Use double quotes and escape the dollar signs.
+# This ensures $BLUE_HOST is passed as the literal string '$BLUE_HOST' to envsubst,
+# which then substitutes it with the environment variable value.
+CMD ["/bin/sh", "-c", "envsubst '$$BLUE_HOST $$BLUE_PORT $$GREEN_HOST $$GREEN_PORT $$ACTIVE_POOL $$RELEASE_ID' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'"]
