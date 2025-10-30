@@ -28,7 +28,13 @@ deploy_green() {
   export ACTIVE_POOL="green"
   export RELEASE_ID="$RELEASE_ID_GREEN"
 
-  # Regenerate Nginx config
+  # Recreate Nginx with updated config
+  $COMPOSE_CMD up -d nginx
+
+  # Wait briefly for container to start
+  sleep 5
+
+  # Regenerate Nginx config inside container
   $COMPOSE_CMD exec -T nginx /bin/sh -c "
     envsubst '\$ACTIVE_POOL \$BLUE_HOST \$BLUE_PORT \$GREEN_HOST \$GREEN_PORT \$RELEASE_ID' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
     nginx -s reload
