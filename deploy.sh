@@ -23,7 +23,7 @@ echo "🌀 Current active pool: $ACTIVE_POOL"
 echo "🔄 Switching to new pool: $NEW_POOL"
 
 # Environment variables for substitution
-export ACTIVE_POOL="${NEW_POOL}_pool"
+export ACTIVE_POOL="${NEW_POOL}"
 export RELEASE_ID="${NEW_POOL}-$(date +%s)"
 
 # Generate nginx.conf from template
