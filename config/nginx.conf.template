@@ -20,22 +20,12 @@ http {
         listen 80;
 
         location / {
-            # Default target if not set
-            set $target_pool blue_pool;
-            if ($${ACTIVE_POOL}) {
-                set $target_pool $${ACTIVE_POOL};
-            }
-
-            # Pass traffic to active pool
-            proxy_pass http://$target_pool;
+            # Send traffic directly to the active pool
+            proxy_pass http://$${ACTIVE_POOL};
             proxy_http_version 1.1;
             proxy_set_header Host $host;
-            proxy_set_header X-App-Pool $target_pool;
-
-            # Optional release info
-            if ($${RELEASE_ID}) {
-                proxy_set_header X-Release-Id $${RELEASE_ID};
-            }
+            proxy_set_header X-App-Pool $${ACTIVE_POOL};
+            proxy_set_header X-Release-Id $${RELEASE_ID};
         }
     }
 }
