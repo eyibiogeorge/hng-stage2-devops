@@ -20,7 +20,6 @@ http {
         listen 80;
 
         location / {
-            # Send traffic to the active pool
             proxy_pass http://${ACTIVE_POOL};
             proxy_http_version 1.1;
             proxy_set_header Host $$host;

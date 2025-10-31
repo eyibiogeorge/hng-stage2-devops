@@ -1,39 +1,25 @@
 #!/bin/bash
 set -e
 
-echo "🌀 Detecting active pool..."
-if [ -f .active_pool ]; then
-  ACTIVE_POOL=$(cat .active_pool)
+CURRENT_POOL=$(docker ps --format '{{.Names}}' | grep -E 'app_blue|app_green' | grep -oE 'blue|green' | head -n1)
+if [ "$CURRENT_POOL" == "blue" ]; then
+    NEW_POOL="green"
 else
-  ACTIVE_POOL="blue_pool"
+    NEW_POOL="blue"
 fi
 
-if [ "$ACTIVE_POOL" = "blue_pool" ]; then
-  NEW_POOL="green_pool"
-else
-  NEW_POOL="blue_pool"
-fi
-
-echo "🔄 Switching to new pool: $NEW_POOL"
 RELEASE_ID="${NEW_POOL}-v$(date +%s)"
 
-# Save active pool
-echo "$NEW_POOL" > .active_pool
+echo "🌀 Current active pool: $CURRENT_POOL"
+echo "🔄 Switching to new pool: $NEW_POOL"
 
-# Export for envsubst
-export ACTIVE_POOL=$NEW_POOL
+export ACTIVE_POOL="${NEW_POOL}_pool"
 export RELEASE_ID=$RELEASE_ID
 
-echo "✅ Building Docker images..."
-docker compose build --no-cache
-
-echo "🧩 Generating Nginx configuration..."
+# Render config
 envsubst < config/nginx.conf.template > config/nginx.conf
 
-echo "✅ Nginx configuration generated:"
-cat config/nginx.conf
-
 docker compose down
-docker compose up -d
+docker compose up -d --build
 
-echo "🚀 Deployment complete! Active pool: $NEW_POOL"
+echo "✅ Blue/Green switch complete! Active pool: ${NEW_POOL}"
