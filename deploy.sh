@@ -1,19 +1,14 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -e
 
-# ===========================================
-# 🟦 HNG Blue/Green Deployment Script
-# ===========================================
+echo ""
+echo "🚀 Starting Blue-Green Deployment..."
 
-ACTIVE_POOL_FILE=".active_pool"
+# Load environment variables
+source .env
 
-if [ -f "$ACTIVE_POOL_FILE" ]; then
-  ACTIVE_POOL=$(cat "$ACTIVE_POOL_FILE")
-else
-  ACTIVE_POOL="blue"
-fi
-
-if [ "$ACTIVE_POOL" == "blue" ]; then
+# Determine active/inactive pools
+if [ "$ACTIVE_POOL" = "blue" ]; then
   NEW_POOL="green"
 else
   NEW_POOL="blue"
@@ -22,27 +17,32 @@ fi
 echo "🌀 Current active pool: $ACTIVE_POOL"
 echo "🔄 Switching to new pool: $NEW_POOL"
 
-# Environment variables for substitution
-export ACTIVE_POOL="${NEW_POOL}"
-export RELEASE_ID="${NEW_POOL}-$(date +%s)"
+# Update .env to reflect new active pool
+sed -i "s/ACTIVE_POOL=$ACTIVE_POOL/ACTIVE_POOL=$NEW_POOL/" .env
 
-# Generate nginx.conf from template
-envsubst '$ACTIVE_POOL $RELEASE_ID' < nginx/nginx.conf.template > nginx/nginx.conf
+# Rebuild nginx configuration using envsubst
+export ACTIVE_POOL=$NEW_POOL
+envsubst '$ACTIVE_POOL $BLUE_HOST $BLUE_PORT $GREEN_HOST $GREEN_PORT' \
+  < ./config/nginx.conf.template > ./config/nginx.conf.generated
 
-echo "✅ Generated nginx.conf for $NEW_POOL"
+echo "✅ Generated nginx.conf for pool: $NEW_POOL"
 
-# Launch or update containers
+# Recreate services
+docker compose down
 docker compose up -d --build
 
-# Test Nginx config inside container
 echo "🔍 Testing Nginx configuration..."
-docker compose exec nginx nginx -t
+sleep 3
 
-# Reload Nginx gracefully
-echo "♻️ Reloading Nginx..."
-docker compose exec nginx nginx -s reload || docker compose restart nginx
+# Verify nginx container is healthy
+if docker compose ps nginx | grep -q "running"; then
+  echo "✅ Nginx started successfully and is routing to $NEW_POOL pool."
+else
+  echo "❌ Nginx failed to start. Check logs:"
+  docker compose logs nginx
+  exit 1
+fi
 
-# Save current active pool
-echo "$NEW_POOL" > "$ACTIVE_POOL_FILE"
+echo "🎉 Deployment complete! Active pool is now: $NEW_POOL"
 
-echo "✅ Switched traffic to $NEW_POOL successfully."
+
