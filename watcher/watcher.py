@@ -6,7 +6,7 @@ from collections import deque
 
 # Configuration from environment
 LOG_PATH = "/var/log/nginx/access.log"
-WEBHOOK = os.getenv("https://hooks.slack.com/services/")
+WEBHOOK = os.getenv("SLACK_WEBHOOK_URL")  # ✅ FIXED — correct env variable
 THRESHOLD = float(os.getenv("ERROR_RATE_THRESHOLD", "2"))
 WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", "200"))
 COOLDOWN = int(os.getenv("ALERT_COOLDOWN_SEC", "300"))

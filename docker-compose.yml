@@ -54,7 +54,7 @@ services:
       - MAINTENANCE_MODE=${MAINTENANCE_MODE}
     networks:
       - app-network
-
+      
 volumes:
   nginx-logs:
 
