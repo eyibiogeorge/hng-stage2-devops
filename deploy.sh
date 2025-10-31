@@ -1,37 +1,59 @@
 #!/bin/bash
 set -e
 
-# Detect current running pool
-CURRENT_POOL=$(docker ps --format '{{.Names}}' | grep -E 'app_blue|app_green' | grep -oE 'blue|green' | head -n1)
+# ===========================
+# CONFIGURATION
+# ===========================
+ENV_FILE=".env"
 
-if [ "$CURRENT_POOL" == "blue" ]; then
-    NEW_POOL="green"
+# Load environment variables
+if [ -f "$ENV_FILE" ]; then
+    export $(grep -v '^#' "$ENV_FILE" | xargs)
 else
-    NEW_POOL="blue"
+    echo "[ERROR] .env file not found!"
+    exit 1
 fi
 
-RELEASE_ID="${NEW_POOL}-v$(date +%s)"
+# Check if Slack webhook is set
+if [ -z "$SLACK_WEBHOOK_URL" ]; then
+    echo "[ERROR] SLACK_WEBHOOK_URL not set in .env"
+    exit 1
+fi
 
-echo "🌀 Current active pool: $CURRENT_POOL"
-echo "🔄 Switching to new pool: $NEW_POOL"
+# ===========================
+# FUNCTIONS
+# ===========================
+send_slack_notification() {
+    local message="$1"
+    local payload=$(jq -n --arg text "$message" '{text: $text}')
 
-# Export for envsubst
-export ACTIVE_POOL="${NEW_POOL}_pool"
-export RELEASE_ID=$RELEASE_ID
+    echo "[INFO] Sending Slack notification..."
+    curl -X POST -H "Content-type: application/json" \
+        --data "$payload" \
+        "$SLACK_WEBHOOK_URL" || echo "[WARN] Failed to send Slack message"
+}
 
-# Confirm values
-echo "ACTIVE_POOL=$ACTIVE_POOL"
-echo "RELEASE_ID=$RELEASE_ID"
+test_slack_webhook() {
+    echo "[TEST] Testing Slack Webhook..."
+    local test_message="✅ Slack webhook test from deploy.sh at $(date '+%Y-%m-%d %H:%M:%S')"
+    send_slack_notification "$test_message"
+    echo "[INFO] Test message sent to Slack."
+}
 
-# Substitute explicitly
-envsubst '${ACTIVE_POOL} ${RELEASE_ID}' < config/nginx.conf.template > config/nginx.conf
+# ===========================
+# MAIN DEPLOY LOGIC
+# ===========================
+echo "[INFO] Starting deployment process..."
 
-# Rebuild and restart
+# Run Slack test once at startup
+test_slack_webhook
+
+# Example deploy logic (simplified)
 docker compose down
 docker compose up -d --build
 
-echo "✅ Blue/Green switch complete! Active pool: ${NEW_POOL}"
-
-curl -X POST -H 'Content-type: application/json' \
---data "{\"text\":\"✅ Deployment successful to *$ACTIVE_POOL* environment!\"}" \
-"$SLACK_WEBHOOK_URL"
+if [ $? -eq 0 ]; then
+    send_slack_notification "🚀 Deployment successful on $(hostname) at $(date '+%Y-%m-%d %H:%M:%S')"
+else
+    send_slack_notification "❌ Deployment failed on $(hostname) at $(date '+%Y-%m-%d %H:%M:%S')"
+fi
