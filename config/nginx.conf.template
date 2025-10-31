@@ -26,14 +26,12 @@ http {
         listen 80;
 
         location / {
-            proxy_pass http://${ACTIVE_POOL}_pool;
-            proxy_http_version 1.1;
+    proxy_pass http://blue_pool;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-App-Pool blue;
+    proxy_set_header X-Release-Id blue-v1;
+    }
 
-            # ✅ FIXED AGAIN — prevent envsubst from touching $host
-            proxy_set_header Host \$host;
-
-            proxy_set_header X-App-Pool ${ACTIVE_POOL};
-            proxy_set_header X-Release-Id ${RELEASE_ID};
-        }
     }
 }
