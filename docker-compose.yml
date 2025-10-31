@@ -47,7 +47,9 @@ services:
   alert_watcher:
     build:
       context: ./watcher
-    container_name: alert_watcher
+      dockerfile: Dockerfile
+    container_name: hng-stage2-devops-alert_watcher
+    restart: always
     volumes:
       - nginx-logs:/var/log/nginx
     environment:
