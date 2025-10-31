@@ -1,6 +1,6 @@
 FROM nginx:latest
 
 RUN apt-get update && apt-get install -y gettext-base
-COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
 
-CMD ["/bin/bash", "-c", "envsubst '$ACTIVE_POOL $BLUE_HOST $BLUE_PORT $GREEN_HOST $GREEN_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
+COPY config/nginx.conf.template /etc/nginx/nginx.conf.template
+CMD ["/bin/bash", "-c", "envsubst < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]

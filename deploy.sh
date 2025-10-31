@@ -1,48 +1,24 @@
 #!/bin/bash
 set -e
 
-echo ""
-echo "🚀 Starting Blue-Green Deployment..."
-
-# Load environment variables
-source .env
-
-# Determine active/inactive pools
-if [ "$ACTIVE_POOL" = "blue" ]; then
-  NEW_POOL="green"
+CURRENT_POOL=$(docker compose ps --status=running | grep app_blue || true)
+if [ -n "$CURRENT_POOL" ]; then
+    ACTIVE_POOL="green"
+    OLD_POOL="blue"
 else
-  NEW_POOL="blue"
+    ACTIVE_POOL="blue"
+    OLD_POOL="green"
 fi
 
-echo "🌀 Current active pool: $ACTIVE_POOL"
-echo "🔄 Switching to new pool: $NEW_POOL"
+echo "🌀 Current active pool: ${OLD_POOL:-none}"
+echo "🔄 Switching to new pool: $ACTIVE_POOL"
 
-# Update .env to reflect new active pool
-sed -i "s/ACTIVE_POOL=$ACTIVE_POOL/ACTIVE_POOL=$NEW_POOL/" .env
+export ACTIVE_POOL="${ACTIVE_POOL}_pool"
+export RELEASE_ID="${ACTIVE_POOL}-v1"
 
-# Rebuild nginx configuration using envsubst
-export ACTIVE_POOL=$NEW_POOL
-envsubst '$ACTIVE_POOL $BLUE_HOST $BLUE_PORT $GREEN_HOST $GREEN_PORT' \
-  < ./config/nginx.conf.template > ./config/nginx.conf.generated
+envsubst < config/nginx.conf.template > config/nginx.conf
 
-echo "✅ Generated nginx.conf for pool: $NEW_POOL"
-
-# Recreate services
 docker compose down
 docker compose up -d --build
 
-echo "🔍 Testing Nginx configuration..."
-sleep 3
-
-# Verify nginx container is healthy
-if docker compose ps nginx | grep -q "running"; then
-  echo "✅ Nginx started successfully and is routing to $NEW_POOL pool."
-else
-  echo "❌ Nginx failed to start. Check logs:"
-  docker compose logs nginx
-  exit 1
-fi
-
-echo "🎉 Deployment complete! Active pool is now: $NEW_POOL"
-
-
+echo "✅ Blue/Green switch complete! Active pool: $ACTIVE_POOL"
