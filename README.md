@@ -1,224 +1,153 @@
-# DevOps Intern Stage 2 Task -  Blue/Green with Nginx Upstreams (Auto-Failover + Manual Toggle)
+# 🚀 HNG Stage 2 DevOps — Blue-Green Deployment with Automated Alerting
 
-This project implements a blue-green deployment strategy using Docker Compose, Nginx as a reverse proxy, and two application instances (`blue` and `green`) running the [yimikaade/wonderful:devops-stage-two](https://hub.docker.com/r/yimikaade/wonderful/tags) image. The setup supports zero-downtime deployments with automatic failover and header validation for release tracking.
+This project demonstrates a **Blue-Green Deployment setup** using **Docker Compose**, **Nginx load balancing**, and a **custom Alert Watcher** that sends notifications to Slack during failovers or error spikes.
 
-## Features
+---
 
-- **Blue-Green Deployment:** Two application instances (`app_blue` and `app_green`) allow switching between deployments without downtime.
+## 🧩 Project Structure
 
-- **Nginx Reverse Proxy:** Routes traffic to the active pool (`blue` or `green`) with failover to the backup pool on errors (HTTP 5xx, timeouts, or connection issues).
-
-- **Dynamic Configuration:** Uses `envsubst` to generate Nginx configurations based on environment variables.
-
-- **Header Validation:** Verifies `X-App-Pool` and `X-Release-Id` headers in responses to ensure correct routing and release tracking.
-
-- **Automated Deployment:** A Bash script (`deploy-stage2.sh`) handles setup, validation, and error logging.
-
-## Prerequisites
-
-- **Docker:** Ensure Docker is installed and running.
-
-- **Docker Compose V2:** Required for managing the multi-container setup (`docker compose` preferred over `docker-compose`).
-
-- **Bash:** A Bash-compatible shell for running the deployment script.
-
-- **Port Availability:** Ports `8080`, `8081`, and `8082` must be free on the host.
-
-## Directory Structure
-
-```bash
-hng-stage2-devops/
-├── docker-compose.yml           # Defines Nginx, app_blue, and app_green services
+├── app_blue/ # Blue environment (Node.js/TypeScript app)
+├── app_green/ # Green environment (Node.js/TypeScript app)
 ├── config/
-│   └── nginx.conf.template      # Nginx configuration template for envsubst
-├── .env                        # Environment variables for configuration
-├── .env.example                # Example environment variables
-└── deploy-stage2.sh            # Deployment script
-```
+│ └── nginx.conf.template # Nginx reverse proxy configuration
+├── watcher/
+│ └── alert_watcher.js # Slack-integrated alert watcher
+├── docker-compose.yml # Multi-service orchestration
+├── deploy.sh # Automated blue/green switch script
+├── RUNBOOK.md # Alert handling and operator actions
+└── README.md # Setup and usage guide
 
-## Setup Instructions
+yaml
+Copy code
 
-1. **Clone the Repository**
-    ```bash
-    git clone <https://github.com/eyibiogeorge/hng-stage2-devops.git>
-    cd hng-stage2-devops
-    ```
-2. **Create Directory Structure:**
+---
+
+## ⚙️ Setup Instructions
+
+### 1️⃣ Clone the Repository
 ```bash
-mkdir -p config
-```
+git clone https://github.com/<your-username>/hng-stage2-devops.git
+cd hng-stage2-devops
+2️⃣ Configure Slack Webhook
+Create a Slack Incoming Webhook in your workspace and export it as an environment variable:
 
-3. **Configure Environment Variables:**
+bash
+Copy code
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/XXXXXXXXX/YYYYYYYYY/ZZZZZZZZZZZZ"
+(You can add this line to your .env file for persistence.)
 
-    - Copy the example `.env` file:
-        ```bash
-        cp .env.example .env
-        ```
-    - Edit .`env` to set the required variables:
+3️⃣ Start All Services
+Run all containers in the background:
 
-        ```bash
-        BLUE_IMAGE=yimikaade/wonderful:devops-stage-two
-        GREEN_IMAGE=yimikaade/wonderful:devops-stage-two
-        ACTIVE_POOL=blue
-        RELEASE_ID_BLUE=blue-release-1.0.0
-        RELEASE_ID_GREEN=green-release-1.0.0
-        PORT=8080
-        PORT_BLUE=8081
-        PORT_GREEN=8082
-        ```
-    - Ensure `BLUE_IMAGE` and `GREEN_IMAGE` point to valid Docker images, and `ACTIVE_POOL` is either `blue` or `green`.
+bash
+Copy code
+docker compose up -d --build
+This starts:
 
-4. **Verify Files:**
+nginx – reverse proxy & traffic router
 
-    - Confirm the presence of `docker-compose.yml`, `config/nginx.conf.template`, `.env`, and `deploy-stage2.sh`:
+app_blue and app_green – Node.js application servers
 
-        ```bash
-        ls -l
-        ls -l config/
-        ```
-    
-5. Make the Deployment Script Executable:
-    ```bash
-    chmod +x deploy-stage2.sh
-    ```
+alert_watcher – health and log monitoring service
 
-## Deployment
+4️⃣ Verify Running Containers
+bash
+Copy code
+docker ps
+You should see containers for:
 
-Run the deployment script to start the services:
-```bash
-./deploy-stage2.sh
-```
-The script:
+nginx
 
-- Checks for required files and environment variables.
+app_blue
 
-- Verifies port availability (`8080`, `8081`, `8082`).
+app_green
 
-- Pulls Docker images.
+hng-stage2-devops-alert_watcher
 
-- Starts Docker Compose services (`nginx`, `app_blue`, `app_green`).
+5️⃣ Access the Application
+Visit:
 
-- Validates the deployment by checking the /version endpoint and response headers.
+arduino
+Copy code
+http://localhost
+You’ll see a welcome page indicating which pool (Blue or Green) is active.
 
-- Logs output to `deploy_stage2_YYYYMMDD_HHMMSS.log.`
+🧪 Chaos Testing (Failover Simulation)
+Simulate different failure events to validate your alert system:
 
-## Testing
+🔹 Test 1 — Blue App Failure
+Stop the active container:
 
-1. **Baseline Test:**
+bash
+Copy code
+docker stop app_blue
+Expected:
+Slack should receive a message:
 
-    ```bash
-    curl -v http://localhost:8080/version
-    ```
-    **Expected Output:**
+🚨 Failover Event Detected — Active Pool (blue) is unreachable!
 
-    - HTTP 200
+🔹 Test 2 — High Error Rate
+Send repeated invalid requests to generate 5xx errors:
 
-    - Headers: `X-App-Pool`: `blue`, `X-Release-Id`: `blue-release-1.0.0` (if `ACTIVE_POOL=blue`)
+bash
+Copy code
+for i in {1..15}; do curl http://localhost/invalid; done
+Expected:
+Slack should alert:
 
-2. **Failover Test:**
+⚠️ High Error Rate Alert — Multiple 5xx errors detected in Blue service.
 
-    - Induce chaos on the blue pool:
+🔹 Test 3 — Service Restart
+bash
+Copy code
+docker restart nginx
+Expected:
+You should see a new ✅ Deployment Complete message after successful reload.
 
-        ```bash
-        curl -X POST http://localhost:8081/chaos/start?mode=error
-        ```
+🪵 Viewing Logs
+View Nginx Logs
+bash
+Copy code
+docker compose logs -f nginx
+View Application Logs
+bash
+Copy code
+docker compose logs -f app_blue
+docker compose logs -f app_green
+View Alert Watcher Logs
+bash
+Copy code
+docker compose logs -f hng-stage2-devops-alert_watcher
+💬 Verifying Slack Alerts
+To confirm Slack connectivity manually:
 
-    - Verify switch to green:
-        ```bash
-        curl -v http://localhost:8080/version
-        ```
-    **Expected Output:**
+bash
+Copy code
+curl -X POST -H 'Content-type: application/json' \
+     --data '{"text":"🔔 Test Notification from HNG DevOps"}' \
+     $SLACK_WEBHOOK_URL
+If you see the message in your Slack channel, alerting is working correctly.
 
-    - HTTP 200
+🖼️ Reference Screenshots
+Screenshot	Description
+Deployment Complete Screenshot	Slack message confirming Blue/Green switch
+Failover Event Screenshot	Slack alert showing failed active pool
+High Error Rate Screenshot	Slack alert when excessive 5xx errors are detected
 
-    - Headers: X-App-Pool: green, X-Release-Id: green-release-1.0.0
+All screenshots can be found in the screenshots/ directory of this repository.
 
-    - Test stability:
+🧭 Additional Resources
+RUNBOOK.md — Detailed guide on interpreting alerts and response actions.
 
-        ```bash
-        for i in {1..20}; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/version; done
-        ```
+Nginx Config Template — Logic for routing between blue and green pools.
 
-    **Expected Output:** All 200 responses, ~100% green responses.
+Alert Watcher Script — Slack integration logic.
 
-    - Stop chaos:
+🧑‍💻 Maintainer
+Name: George Eyibio
+Version: v2.1
+Last Updated: October 31, 2025
 
-        ```bash
-        curl -X POST http://localhost:8081/chaos/stop
-        ```
-
-3. Manual Pool Switch:
-
-    - Edit `.env` to set `ACTIVE_POOL=green`:
-        ```bash
-        nano .env
-        ```
-
-    - Restart Nginx:
-        ```bash
-        docker compose down
-        docker compose up -d nginx
-        ```
-
-    - Verify:
-        ```bash
-        curl -v http://localhost:8080/version
-        ```
-
-## Troubleshooting
-
-- **Port Conflict:**
-    ```bash
-    ss -tulnp | grep ":8080"
-    sudo fuser -k 8080/tcp
-    ```
-- **Container Logs:**
-
-    ```bash
-    docker compose logs nginx
-    docker compose logs app_blue
-    docker compose logs app_green
-    ```
-
-- Nginx Configuration:
-
-    ```bash
-    docker compose exec nginx cat /tmp/nginx_config.log
-    docker compose exec nginx cat /tmp/nginx_config_error.log
-    ```
-
-- Direct Application Test:
-
-    ```bash
-    curl -v http://localhost:8081/version  # app_blue
-    curl -v http://localhost:8082/version  # app_green
-    ```
-
-- Check Container Status:
-    ```bash
-    docker compose ps
-    ```
-## Configuration Details
-
-- **docker-compose.yml:**
-
-    - Defines three services: `nginx`, `app_blue`, and `app_green`.
-
-    - Maps host ports `8080` (Nginx), `8081` (blue), and `8082` (green) to container ports.
-
-    - Uses `nginx:1.25-alpine` with runtime `gettext` installation for `envsubst`.
-
-- **nginx.conf.template:**
-
- - Configures upstream blocks (`blue_pool`, `green_pool`) and routes traffic to the active pool (`${ACTIVE_POOL}_pool`).
-
-    - Supports failover with `proxy_next_upstream` for errors and timeouts.
-
-- deploy-stage2.sh:
-
-    - Validates files, environment variables, and ports.
-
-    - Logs errors and container output for debugging.
-
-    - Verifies headers (`X-App-Pool`, `X-Release-Id`) in responses.
+✅ Project Goal:
+Demonstrate an automated Blue-Green Deployment pipeline with Slack-based monitoring and incident response — following DevOps best practices.
 

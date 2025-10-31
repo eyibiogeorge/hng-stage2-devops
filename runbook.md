@@ -1,155 +1,216 @@
-# 🧭 HNG Stage 2 DevOps — Blue/Green Deployment Runbook
+# 🧭 HNG Stage 2 DevOps — Alert & Incident Response Runbook
 
 ## 📘 Overview
-This runbook describes how to deploy, monitor, and test the **Blue/Green deployment system** for the HNG Stage 2 DevOps project.  
-The project uses **Docker Compose** for container orchestration, **Nginx** as a reverse proxy, and a custom **Alert Watcher** that notifies a Slack channel of failover or high-error events.
+This document explains the **alert system**, **notification meanings**, and the **required actions** operators must take when an alert is triggered.
+
+The alert system is powered by the `alert_watcher` container, which continuously monitors:
+- **Nginx logs** for HTTP errors (5xx, 4xx)
+- **Service status** for Blue/Green app pools
+- **Deployment switch events**
+
+Alerts are delivered via **Slack Webhook**, ensuring real-time visibility into service health.
 
 ---
 
-## 🏗️ System Components
-| Service | Description |
-|----------|-------------|
-| `app_blue` | Active/standby Node.js (TypeScript) application container |
-| `app_green` | Alternate Node.js container for zero-downtime deployments |
-| `nginx` | Load balancer and traffic router between Blue and Green pools |
-| `alert_watcher` | Python service that monitors Nginx logs and sends Slack alerts |
+## 🚨 Alert Categories
+
+| Alert Type | Source | Trigger Condition | Notification Channel |
+|-------------|---------|------------------|-----------------------|
+| ✅ **Deployment Complete** | `deploy.sh` script | When a Blue/Green switch completes successfully | Slack |
+| 🚨 **Failover Event** | `alert_watcher` | When active pool (blue/green) becomes unresponsive | Slack |
+| ⚠️ **High Error Rate** | `alert_watcher` | When 10 or more 5xx errors occur within 1 minute | Slack |
+| 💤 **Service Down** | `alert_watcher` | When any container (app, nginx, watcher) stops | Slack |
+| 🧱 **Configuration Error** | `nginx` | When syntax or routing issues prevent Nginx from starting | Docker Logs |
 
 ---
 
-## ⚙️ Environment Variables
-Create a `.env` file in the project root with the following values:
+## ✅ Deployment Complete
+**Example Slack Message:**
+> ✅ Blue/Green Switch Complete — Active Pool: green
 
-```bash
-ACTIVE_POOL=blue
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/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
-🚀 Deployment Procedure
-Step 1 — Build and Start All Services
-bash
-Copy code
-docker compose up -d --build
-✅ This command builds all containers, starts Nginx, the two app pools, and the alert watcher.
+### Meaning:
+- Deployment succeeded.
+- Nginx config reloaded successfully.
+- All containers are healthy and serving traffic.
 
-Verify all services are running:
+### Operator Actions:
+- Verify that `curl http://<server-ip>` returns the app page.
+- No further action required unless alert_watcher reports follow-up issues.
 
-bash
-Copy code
-docker compose ps
-Step 2 — Check Application
-Visit:
+---
 
-bash
-Copy code
-http://<server-ip>/
-You should see a welcome page confirming that the app is running successfully.
+## 🚨 Failover Event
+**Example Slack Message:**
+> 🚨 Failover Event Detected — Active Pool (blue) is unreachable!
 
-🔁 Blue/Green Switch Procedure
-To perform a zero-downtime switch between environments:
+### Meaning:
+- The current live application (Blue or Green) stopped responding.
+- The watcher detected failed health checks or unreachable upstream.
+- Nginx might have switched traffic to the standby environment (if configured).
 
-bash
-Copy code
-./deploy.sh
-The script:
+### Possible Causes:
+- App container crashed.
+- Network interruption between app and Nginx.
+- Node.js process failed due to runtime error.
+- Memory or port exhaustion.
 
-Detects the current active pool (blue or green).
-
-Switches traffic to the alternate pool.
-
-Regenerates the Nginx configuration.
-
-Sends a Slack notification confirming the switch.
-
-Expected Slack message:
-
-✅ Blue/Green Switch Complete — Active Pool: green
-
-🧨 Failover Event Test
-This test verifies that Slack notifications work when one environment fails.
-
-Steps:
-Identify current active pool:
+### Operator Actions:
+1. Run health check:
+   ```bash
+   docker ps
+Restart the failed service:
 
 bash
 Copy code
-cat .env | grep ACTIVE_POOL
-Stop that container to simulate a failure:
+docker restart app_blue  # or app_green
+Review app logs:
 
 bash
 Copy code
-docker stop app_blue  # or app_green
-Access your app:
+docker logs app_blue --tail 50
+Confirm recovery:
 
 bash
 Copy code
 curl http://localhost
-You’ll see a connection failure (502/500).
+Post incident summary to Slack (optional):
 
-Check Slack:
-You should receive a message like:
+✅ Service restored after failover — Root cause: [describe issue]
 
-🚨 Failover Event Detected — Active Pool (blue) is unreachable!
+⚠️ High Error Rate
+Example Slack Message:
 
-📸 Failover Event Screenshot
-Take a screenshot showing:
+⚠️ High Error Rate Alert — Multiple 5xx errors detected in Blue service.
 
-Terminal logs with Failover detected
+Meaning:
+Watcher detected a sustained error pattern (e.g., 10+ server errors in 60 seconds).
 
-Slack alert in your workspace
+Indicates degraded performance or partial outage.
 
-⚠️ High Error Rate Alert Test
-This test simulates a surge in error responses to trigger a high-error Slack alert.
+Possible Causes:
+Database or external API failure.
 
-Steps:
-Stop one pool (e.g., Blue):
+Code regression in latest deployment.
 
-bash
-Copy code
-docker stop app_blue
-Send multiple failed requests:
+Nginx routing errors or resource bottleneck.
 
-bash
-Copy code
-for i in {1..20}; do curl -s -o /dev/null -w "%{http_code}\n" http://localhost; done
+Operator Actions:
 Check watcher logs:
 
 bash
 Copy code
 docker compose logs -f hng-stage2-devops-alert_watcher
-You’ll see:
-
-scss
-Copy code
-[WARN] High error rate detected! (error_count=10)
-[INFO] Sending Slack notification...
-[ALERT] High Error Rate reported successfully.
-Check Slack:
-
-⚠️ High Error Rate Alert — Multiple 5xx errors detected in Blue service.
-
-📸 High Error Rate Screenshot
-Capture terminal logs and Slack message together.
-
-🧰 Recovery Procedure
-After tests:
+Inspect Nginx logs:
 
 bash
 Copy code
-docker start app_blue app_green
-docker compose restart nginx
-To clean up:
+docker compose logs -f nginx
+Restart app containers if necessary:
 
 bash
 Copy code
-docker compose down
-🧑‍💻 Troubleshooting
-Issue	Cause	Solution
-nginx: invalid number of arguments in directive	Bad Nginx syntax	Validate config/nginx.conf.template
-host not found in upstream	Wrong upstream name	Ensure upstream blocks match app service names
-curl: (7) couldn't connect to server	Nginx not running	Run docker compose restart nginx
-Slack alert not sent	Wrong webhook or network issue	Verify SLACK_WEBHOOK_URL in .env
+docker restart app_blue app_green
+Investigate specific endpoints or functions generating errors.
 
-🏁 Verification Checklist
-✅ App loads via Nginx
-✅ Blue/Green switch works via deploy.sh
-✅ Slack receives failover and high error rate alerts
-✅ Both screenshots captured and saved
+Document findings and notify the dev team.
 
+💤 Service Down
+Example Slack Message:
+
+💤 Service Down — Nginx container stopped unexpectedly.
+
+Meaning:
+Docker reported that a critical container exited or crashed.
+
+Could be due to configuration errors, OOM (Out Of Memory), or manual stop.
+
+Operator Actions:
+Identify stopped container:
+
+bash
+Copy code
+docker ps -a
+Restart it:
+
+bash
+Copy code
+docker start <container_name>
+Review crash logs:
+
+bash
+Copy code
+docker logs <container_name> --tail 50
+If service repeatedly fails, run:
+
+bash
+Copy code
+docker compose down && docker compose up -d --build
+🧱 Configuration Error
+Example Docker Logs:
+
+typescript
+Copy code
+nginx  | [emerg] invalid number of arguments in "proxy_set_header" directive
+Meaning:
+Nginx configuration file (nginx.conf.template) has a syntax error.
+
+The service failed to start or reload due to invalid directives.
+
+Operator Actions:
+Check Nginx logs:
+
+bash
+Copy code
+docker compose logs nginx
+Validate configuration:
+
+bash
+Copy code
+docker compose exec nginx nginx -t
+Correct syntax in config/nginx.conf.template.
+
+Rebuild container:
+
+bash
+Copy code
+docker compose up -d --build
+🧩 Slack Notification Troubleshooting
+If no alerts appear in Slack:
+
+Check webhook variable:
+
+bash
+Copy code
+echo $SLACK_WEBHOOK_URL
+Test manually:
+
+bash
+Copy code
+curl -X POST -H 'Content-type: application/json' \
+     --data '{"text":"🔔 Slack Test Notification"}' \
+     $SLACK_WEBHOOK_URL
+Ensure container has internet access:
+
+bash
+Copy code
+docker exec -it hng-stage2-devops-alert_watcher ping google.com
+Restart the watcher:
+
+bash
+Copy code
+docker restart hng-stage2-devops-alert_watcher
+🧰 Summary of Operator Workflow
+Scenario	Operator Response
+Deployment alert	Validate success with curl http://localhost
+Failover alert	Restart affected app and confirm recovery
+High error rate	Investigate logs and check backend/API
+Service down	Restart stopped containers
+Config error	Fix Nginx config and rebuild
+No Slack alerts	Verify webhook connectivity
+
+🏁 Notes
+The alert_watcher container is the first line of defense for real-time monitoring.
+
+Always verify container health after deployments or failover tests.
+
+Document all incident responses for future improvements.
