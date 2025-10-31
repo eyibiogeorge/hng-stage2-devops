@@ -1,13 +1,10 @@
-pid /var/run/nginx.pid;
+worker_processes auto;
 
 events {
     worker_connections 1024;
 }
 
 http {
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
-
     upstream blue_pool {
         server app_blue:3000;
     }
@@ -16,16 +13,25 @@ http {
         server app_green:3000;
     }
 
+    map $ACTIVE_POOL $backend_upstream {
+        default blue_pool;
+        blue blue_pool;
+        green green_pool;
+    }
+
     server {
         listen 80;
+        server_name _;
 
         location / {
-            proxy_pass http://${ACTIVE_POOL};
+            proxy_pass http://$backend_upstream;
             proxy_http_version 1.1;
+
+            # ✅ CORRECT headers (each must have exactly two arguments)
             proxy_set_header Host $host;
-            proxy_set_header X-App-Pool ${ACTIVE_POOL};
-            proxy_set_header X-Release-Id ${RELEASE_ID};
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
 }
-
