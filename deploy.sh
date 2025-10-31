@@ -32,3 +32,6 @@ docker compose up -d --build
 
 echo "✅ Blue/Green switch complete! Active pool: ${NEW_POOL}"
 
+curl -X POST -H 'Content-type: application/json' \
+--data "{\"text\":\"✅ Deployment successful to *$ACTIVE_POOL* environment!\"}" \
+"$SLACK_WEBHOOK_URL"
