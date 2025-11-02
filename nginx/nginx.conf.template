@@ -1,32 +1,46 @@
-worker_processes  1;
+worker_processes 1;
 events { worker_connections 1024; }
 
 http {
   upstream backend {
-    # Blue/Green pools
-    server ${PRIMARY_SERVER} max_fails=2 fail_timeout=3s;
-    server ${BACKUP_SERVER} backup max_fails=2 fail_timeout=3s;
+    server app_blue:${PORT} max_fails=1 fail_timeout=3s;
+    server app_green:${PORT} backup;
   }
 
   server {
-    listen 8080;
+    listen 80;
 
     location / {
       proxy_pass http://backend;
-
-      # Forward key headers
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
 
-      # Retry policy: transparent failover to backup
-      proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+      proxy_http_version 1.1;
+      proxy_connect_timeout 1s;
+      proxy_read_timeout 2s;
+      proxy_send_timeout 2s;
+
+      proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
       proxy_next_upstream_tries 2;
-      proxy_intercept_errors off;
+
+      proxy_pass_request_headers on;
+    }
+
+    location /version {
+      proxy_pass http://backend/version;
+      proxy_pass_request_headers on;
+    }
+
+    location /chaos/ {
+      proxy_pass http://backend;
+      proxy_pass_request_headers on;
     }
 
     location /healthz {
       proxy_pass http://backend/healthz;
+      proxy_pass_request_headers on;
     }
   }
 }
