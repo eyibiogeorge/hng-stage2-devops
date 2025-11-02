@@ -1,0 +1,31 @@
+worker_processes  1;
+events { worker_connections 1024; }
+
+http {
+  upstream backend {
+    server ${PRIMARY_SERVER} max_fails=2 fail_timeout=3s;
+    server ${BACKUP_SERVER} backup max_fails=2 fail_timeout=3s;
+  }
+
+  server {
+    listen 8080;
+
+    location / {
+      proxy_pass http://backend;
+
+      # Forward headers
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+      # Retry policy
+      proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+      proxy_next_upstream_tries 2;
+      proxy_intercept_errors off;
+    }
+
+    location /healthz {
+      proxy_pass http://backend/healthz;
+    }
+  }
+}
