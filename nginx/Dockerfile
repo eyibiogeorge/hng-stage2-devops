@@ -1,13 +1,13 @@
 FROM nginx:stable-alpine
 
-# Install envsubst for templating
 RUN apk add --no-cache gettext
 
-# Copy config template
+# Copy the nginx config template
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
 
-# Ensure target directory and placeholder config exist
+# Ensure default.conf exists so Docker mount works
 RUN mkdir -p /etc/nginx/conf.d && touch /etc/nginx/conf.d/default.conf
 
-EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+# Copy startup script
+COPY docker-entrypoint.sh /docker-entrypoint.d/50-render-nginx-template.sh
+RUN chmod +x /docker-entrypoint.d/50-render-nginx-template.sh
