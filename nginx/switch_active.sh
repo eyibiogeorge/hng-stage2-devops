@@ -10,12 +10,12 @@ TARGET="$1"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="${PROJECT_ROOT}/.env"
 
-# Load environment
+# Load .env
 if [ -f "$ENV_FILE" ]; then
   export $(grep -v '^#' "$ENV_FILE" | xargs)
 fi
 
-# Define upstreams
+# Define upstreams inside Docker network
 BLUE_ADDR="app_blue:8081"
 GREEN_ADDR="app_green:8082"
 
@@ -37,15 +37,23 @@ echo "Backup:  $BACKUP_SERVER"
 TEMPLATE_FILE="${PROJECT_ROOT}/nginx/nginx.conf.template"
 GENERATED_FILE="${PROJECT_ROOT}/nginx/generated-nginx.conf"
 
-# Render template
+# Make sure the target file exists
+mkdir -p "$(dirname "$GENERATED_FILE")"
+touch "$GENERATED_FILE"
+
+# Render template inside a temporary Alpine container (cleaner)
 docker run --rm -i \
   -v "${TEMPLATE_FILE}":/in.conf \
   -v "${GENERATED_FILE}":/out.conf \
   -e PRIMARY_SERVER -e BACKUP_SERVER \
   alpine/sh -c "apk add --no-cache gettext >/dev/null && envsubst '\$PRIMARY_SERVER \$BACKUP_SERVER' < /in.conf > /out.conf"
 
-echo "✅ Updated nginx config"
+echo "✅ Nginx config updated"
 
-# Reload nginx gracefully
-docker compose exec -T nginx nginx -s reload
-echo "✅ Reloaded nginx — now serving $TARGET"
+# Graceful reload
+docker compose exec -T nginx nginx -s reload || {
+  echo "⚠️  Nginx reload failed — ensure containers are up."
+  exit 1
+}
+
+echo "✅ Switched active pool to: $TARGET"
